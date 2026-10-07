@@ -1,0 +1,20 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "password": "admin123",
+      "name": "Administrator",
+      "role": "admin",
+      "active": true
+    },
+    {
+      "id": 2,
+      "username": "operator",
+      "password": "sms123",
+      "name": "SMS Operator",
+      "role": "operator",
+      "active": true
+    }
+  ]
+}

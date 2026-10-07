@@ -1,0 +1,137 @@
+{
+  "grp-1": [
+    {
+      "phone": "+8801111111111",
+      "groupId": "grp-1"
+    },
+    {
+      "phone": "+8802222222222",
+      "groupId": "grp-1"
+    }
+  ],
+  "grp-1790160097597": [
+    {
+      "phone": "8801732090820\n8801732514711",
+      "groupId": "grp-1790160097597"
+    },
+    {
+      "phone": "8801732789654\n8801788963258",
+      "groupId": "grp-1790160097597"
+    },
+    {
+      "phone": "8801765452123",
+      "groupId": "grp-1790160097597"
+    },
+    {
+      "phone": "01732090820",
+      "groupId": "grp-1790160097597"
+    },
+    {
+      "phone": "+8801712345678",
+      "name": "anik",
+      "groupId": "grp-1790160097597"
+    },
+    {
+      "phone": "+8801912345678",
+      "name": "habib",
+      "groupId": "grp-1790160097597"
+    },
+    {
+      "phone": "+8801812345678",
+      "name": "jahid",
+      "groupId": "grp-1790160097597"
+    },
+    {
+      "phone": "+8801512345678",
+      "name": "romon",
+      "groupId": "grp-1790160097597"
+    },
+    {
+      "phone": "+8801612345678",
+      "name": "ridoy",
+      "groupId": "grp-1790160097597"
+    }
+  ],
+  "grp-1791265465662": [
+    {
+      "phone": "8801712345680",
+      "name": "anik",
+      "email": "anik@gmail",
+      "address": "Uttora, dhaka",
+      "groupId": "grp-1791265465662"
+    },
+    {
+      "phone": "8801912345681",
+      "name": "habib",
+      "email": "habib@gmail",
+      "address": "Farmgate dhaka",
+      "groupId": "grp-1791265465662"
+    },
+    {
+      "phone": "8801812345682",
+      "name": "jahid",
+      "email": "jahid@gmail",
+      "address": "airport dhaka",
+      "groupId": "grp-1791265465662"
+    },
+    {
+      "phone": "8801512345683",
+      "name": "romon",
+      "email": "romon@gmail.com",
+      "address": "barishal",
+      "groupId": "grp-1791265465662"
+    },
+    {
+      "phone": "8801612345684",
+      "name": "ridoy",
+      "email": "ridoy@gmail.com",
+      "address": "khulna",
+      "groupId": "grp-1791265465662"
+    }
+  ],
+  "grp-1791346440727": [
+    {
+      "phone": "8801712345680",
+      "name": "anik",
+      "email": "anik@gmail",
+      "address": "Uttora, dhaka",
+      "groupId": "grp-1791346440727"
+    },
+    {
+      "phone": "8801912345681",
+      "name": "habib",
+      "email": "habib@gmail",
+      "address": "Farmgate dhaka",
+      "groupId": "grp-1791346440727"
+    },
+    {
+      "phone": "8801812345682",
+      "name": "jahid",
+      "email": "jahid@gmail",
+      "address": "airport dhaka",
+      "groupId": "grp-1791346440727"
+    },
+    {
+      "phone": "8801512345683",
+      "name": "romon",
+      "email": "romon@gmail.com",
+      "address": "barishal",
+      "groupId": "grp-1791346440727"
+    },
+    {
+      "phone": "8801612345684",
+      "name": "ridoy",
+      "email": "ridoy@gmail.com",
+      "address": "khulna",
+      "groupId": "grp-1791346440727"
+    },
+    {
+      "phone": "01711112222",
+      "groupId": "grp-1791346440727"
+    },
+    {
+      "phone": "01833334444",
+      "groupId": "grp-1791346440727"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "groups": [
+    {
+      "id": "grp-1791350229236",
+      "name": "Group Three",
+      "contacts": 0,
+      "type": "Static",
+      "createdAt": "2026-10-07",
+      "lastSent": "Never"
+    },
+    {
+      "id": "grp-1791346440727",
+      "name": "test two",
+      "contacts": 0,
+      "type": "Static",
+      "createdAt": "2026-10-07",
+      "lastSent": "Never"
+    },
+    {
+      "id": "grp-1791265465662",
+      "name": "Group one",
+      "contacts": 0,
+      "type": "Static",
+      "createdAt": "2026-10-06",
+      "lastSent": "Never"
+    }
+  ]
+}

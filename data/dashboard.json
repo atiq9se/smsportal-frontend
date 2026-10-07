@@ -1,0 +1,61 @@
+{
+  "stats": [
+    {
+      "label": "Remaining SMS Balance",
+      "value": "10000",
+      "trend": "of 7,000 total"
+    },
+    {
+      "label": "Delivered Today",
+      "value": "1342",
+      "trend": "+12.4% from yesterday"
+    },
+    {
+      "label": "Total Contacts",
+      "value": "8976",
+      "trend": "+186 new contacts"
+    },
+    {
+      "label": "Success Rate",
+      "value": "98.6%",
+      "trend": "+0.4% this month"
+    }
+  ],
+  "recentMessages": [
+    {
+      "id": "#SMS-2041",
+      "to": "+8801712-XXXXXX",
+      "content": "Your OTP is 493821. Do not share it with anyone.",
+      "status": "Delivered",
+      "time": "2 min ago"
+    },
+    {
+      "id": "#SMS-2040",
+      "to": "+8801913-XXXXXX",
+      "content": "Your parcel has been shipped. Track: PKG-9912",
+      "status": "Delivered",
+      "time": "18 min ago"
+    },
+    {
+      "id": "#SMS-2039",
+      "to": "+8801817-XXXXXX",
+      "content": "Payment of BDT 1,250 received successfully. Thank you!",
+      "status": "Pending",
+      "time": "35 min ago"
+    },
+    {
+      "id": "#SMS-2038",
+      "to": "+8801511-XXXXXX",
+      "content": "Appointment confirmed for Wed, 10:30 AM.",
+      "status": "Failed",
+      "time": "1 hr ago"
+    },
+    {
+      "id": "#SMS-2037",
+      "to": "+8801618-XXXXXX",
+      "content": "Welcome to SMS Portal! Verify your number now.",
+      "status": "Delivered",
+      "time": "2 hrs ago"
+    }
+  ]
+}
