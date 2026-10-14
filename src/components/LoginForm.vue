@@ -5,7 +5,7 @@ import { useAuth } from "@/composables/useAuth";
 import type { SessionUser } from "@/types";
 
 const router = useRouter();
-const { login } = useAuth();
+const { login, basePath } = useAuth();
 
 const devLogin = import.meta.env.DEV;
 const username = ref(
@@ -45,7 +45,7 @@ async function handleSubmit() {
     if (data.user) {
       login(data.user);
     }
-    router.push("/dashboard");
+    router.push(basePath.value);
   } catch {
     error.value = "Network error. Please check your connection.";
   } finally {

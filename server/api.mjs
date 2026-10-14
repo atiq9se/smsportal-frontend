@@ -80,6 +80,28 @@ const BACKEND_URL = (process.env.SMS_BACKEND_URL || "http://127.0.0.1:8000")
   .trim()
   .replace(/\/+$/, "");
 
+function getSessionUser(request) {
+  if (!request) return null;
+  const cookie = request.headers.get("cookie") ?? "";
+  const match = cookie.match(/(?:^|;\s*)sms_user=([^;]+)/);
+  if (!match) return null;
+  try {
+    return JSON.parse(decodeURIComponent(match[1]));
+  } catch {
+    return null;
+  }
+}
+
+function sessionUserId(session) {
+  const id = parseInt(String(session?.id ?? ""), 10);
+  return Number.isFinite(id) && id > 0 ? id : 0;
+}
+
+function sessionIsAdmin(session) {
+  return session?.role === "admin";
+}
+
+
 async function authenticateViaBackend(username, password) {
   try {
     const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
@@ -159,6 +181,238 @@ async function loginHandler(request) {
   return response;
 }
 
+async function usersHandler(request) {
+  const method = request.method;
+  if (method === "GET") {
+    return usersGetHandler(request);
+  }
+  if (method === "POST") {
+    return usersPostHandler(request);
+  }
+  return json({ success: false, message: "Method not allowed." }, 405);
+}
+
+async function usersGetHandler(request) {
+  const session = getSessionUser(request);
+  const requireAll = !session || sessionIsAdmin(session);
+  const scopeUsers = (users) => {
+    if (requireAll) return users;
+    const id = sessionUserId(session);
+    return users.filter((u) => Number(u.id) === id);
+  };
+
+  const backend = await callBackend("/api/users");
+  if (!backend.offline && Array.isArray(backend.data?.users)) {
+    const users = scopeUsers(backend.data.users);
+    return json(
+      {
+        ...backend.data,
+        users,
+        total: users.length,
+        admins: users.filter((u) => u.role === "admin").length,
+        active: users.filter((u) => u.active).length,
+      },
+      backend.status
+    );
+  }
+
+  const data = await readJson("users.json", { users: [] });
+  const all = (data.users ?? []).map((u) => ({
+    id: u.id,
+    username: u.username,
+    name: u.name,
+    role: u.role,
+    active: u.active !== false,
+    createdAt: u.createdAt ?? u.created_at ?? "",
+  }));
+  const users = scopeUsers(all);
+
+  return json({
+    success: true,
+    users,
+    total: users.length,
+    admins: users.filter((u) => u.role === "admin").length,
+    active: users.filter((u) => u.active).length,
+  });
+}
+
+async function usersPostHandler(request) {
+  const body = await request.json().catch(() => null);
+  const backend = await callBackend("/api/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+  return json({ success: false, message: "Backend unavailable." }, 503);
+}
+
+async function userSmsAssignHandler(request, { userId }) {
+  const id = parseInt(userId, 10);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ success: false, message: "Invalid user ID." }, 400);
+  }
+
+  const body = await request.json().catch(() => null);
+  const count = body?.count;
+  const amount = body?.amount;
+  const costPerSms = body?.costPerSms;
+
+  if (!Number.isFinite(count) || count <= 0) {
+    return json({ success: false, message: "SMS count must be a positive integer." }, 400);
+  }
+
+  const backend = await callBackend(`/api/users/${id}/sms-assign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ count, amount, costPerSms }),
+  }, request);
+
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+  return json({ success: false, message: "Backend unavailable." }, 503);
+}
+
+async function userBalanceHandler(request, { userId }) {
+  const id = parseInt(userId, 10);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ success: false, message: "Invalid user ID." }, 400);
+  }
+
+  const body = await request.json().catch(() => null);
+  const smsBalance = body?.smsBalance;
+  const balanceTaka = body?.balanceTaka;
+
+  if (!Number.isInteger(smsBalance) || smsBalance < 0) {
+    return json({ success: false, message: "SMS balance must be a non-negative integer." }, 400);
+  }
+  if (!Number.isFinite(balanceTaka) || balanceTaka < 0) {
+    return json({ success: false, message: "Taka balance must be a non-negative number." }, 400);
+  }
+
+  const backend = await callBackend(`/api/users/${id}/balance`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ smsBalance, balanceTaka }),
+  }, request);
+
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+  return json({ success: false, message: "Backend unavailable." }, 503);
+}
+
+async function userShowHandler(request, { userId }) {
+  const id = parseInt(userId, 10);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ success: false, message: "Invalid user ID." }, 400);
+  }
+
+  const backend = await callBackend(`/api/users/${id}`, undefined, request);
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+  return json({ success: false, message: "User not found." }, 404);
+}
+
+async function userConsumeHandler(request, { userId }) {
+  const id = parseInt(userId, 10);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ success: false, message: "Invalid user ID." }, 400);
+  }
+
+  const body = await request.json().catch(() => null);
+  const count = body?.count;
+
+  if (!Number.isInteger(count) || count <= 0) {
+    return json({ success: false, message: "SMS count must be a positive integer." }, 400);
+  }
+
+  const backend = await callBackend(`/api/users/${id}/consume`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ count }),
+  });
+
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+  return json({ success: false, message: "Backend unavailable." }, 503);
+}
+
+async function consumeUserSms(userId, count) {
+  if (!Number.isFinite(count) || count <= 0) return null;
+  const id = parseInt(String(userId ?? ""), 10);
+  if (!Number.isFinite(id) || id <= 0) return null;
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/users/${id}/consume`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ count }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) {
+      console.error(`User ${id} consume failed:`, res.status);
+      return null;
+    }
+    return data;
+  } catch (error) {
+    console.error("User consume error:", error);
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * SMS settings (provider API credentials + live balance)
+ * ------------------------------------------------------------------ */
+
+async function smsSettingsGetHandler(request) {
+  const backend = await callBackend("/api/sms-settings", undefined, request);
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+  return json(
+    { success: false, message: "Backend unavailable.", settings: null },
+    503
+  );
+}
+
+async function smsSettingsPostHandler(request) {
+  const body = await request.json().catch(() => null);
+  const backend = await callBackend(
+    "/api/sms-settings",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    },
+    request
+  );
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+  return json({ success: false, message: "Backend unavailable." }, 503);
+}
+
+async function smsSettingsBalanceHandler(request) {
+  const backend = await callBackend(
+    "/api/sms-settings/balance",
+    undefined,
+    request
+  );
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+  return json(
+    { success: false, message: "Backend unavailable.", balance: null },
+    503
+  );
+}
+
 function logoutHandler() {
   const response = json({ success: true });
   response.headers.append(
@@ -168,12 +422,43 @@ function logoutHandler() {
   return response;
 }
 
+function sessionHandler(request) {
+  const session = getSessionUser(request);
+  if (!session) {
+    return json({ success: false, user: null }, 401);
+  }
+  return json({ success: true, user: session });
+}
+
+async function changePasswordHandler(request) {
+  const body = await request.json().catch(() => null);
+  const backend = await callBackend(
+    "/api/auth/change-password",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    },
+    request
+  );
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+  return json(
+    {
+      success: false,
+      message: "Backend unavailable. Cannot change password right now.",
+    },
+    503
+  );
+}
+
 /* ------------------------------------------------------------------ *
  * Dashboard
  * ------------------------------------------------------------------ */
 
-async function getWalletBalance() {
-  const backend = await callBackend("/api/wallet");
+async function getWalletBalance(request) {
+  const backend = await callBackend("/api/wallet", undefined, request);
   if (
     !backend.offline &&
     backend.data &&
@@ -220,7 +505,7 @@ async function deductWallet(count) {
   }
 }
 
-async function getDashboardData() {
+async function getDashboardData(request) {
   const apiUrl = process.env.SMS_DATA_API;
   let data = null;
 
@@ -255,11 +540,26 @@ async function getDashboardData() {
   return {
     stats: data.stats ?? [],
     recentMessages,
-    balance: await getWalletBalance(),
+    balance: await getWalletBalance(request),
   };
 }
 
-const dashboardHandler = async () => json(await getDashboardData());
+const dashboardHandler = async (request) => json(await getDashboardData(request));
+
+async function walletHandler(request) {
+  const backend = await callBackend("/api/wallet", undefined, request);
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+
+  const session = getSessionUser(request);
+  return json({
+    balanceTaka: 0,
+    smsRemaining: 0,
+    smsCostTaka: 0.35,
+    userId: sessionUserId(session),
+  });
+}
 
 /* ------------------------------------------------------------------ *
  * Groups
@@ -281,10 +581,11 @@ async function getGroups() {
   return data.groups ?? [];
 }
 
-async function createGroup(name) {
+async function createGroup(name, userId) {
   const newGroup = {
     id: `grp-${Date.now()}`,
     name,
+    userId: userId ? String(userId) : "",
     contacts: 0,
     type: "Static",
     createdAt: new Date().toISOString().split("T")[0],
@@ -299,31 +600,53 @@ async function createGroup(name) {
   return newGroup;
 }
 
-async function updateGroup(id, name) {
+async function updateGroup(id, name, userId, admin) {
   const parsed = await readJson("groups.json", { groups: [] });
   const groups = parsed.groups ?? [];
   const index = groups.findIndex((g) => g.id === id);
   if (index === -1) return null;
+
+  if (!admin && String(groups[index].userId ?? "") !== String(userId ?? "")) {
+    return null;
+  }
 
   groups[index].name = name;
   await writeJson("groups.json", parsed);
   return groups[index];
 }
 
-async function deleteGroup(id) {
+async function deleteGroup(id, userId, admin) {
   const parsed = await readJson("groups.json", { groups: [] });
   const groups = parsed.groups ?? [];
   const index = groups.findIndex((g) => g.id === id);
   if (index === -1) return false;
+
+  if (!admin && String(groups[index].userId ?? "") !== String(userId ?? "")) {
+    return false;
+  }
 
   groups.splice(index, 1);
   await writeJson("groups.json", parsed);
   return true;
 }
 
-async function callBackend(path, init) {
+async function callBackend(path, init, request) {
   try {
-    const res = await fetch(`${BACKEND_URL}${path}`, init);
+    const options = { ...(init ?? {}) };
+    if (request) {
+      const cookie = request.headers.get("cookie");
+      if (cookie) {
+        options.headers = { ...(options.headers ?? {}), cookie };
+      }
+      const session = getSessionUser(request);
+      if (session) {
+        options.headers = {
+          ...(options.headers ?? {}),
+          "x-sms-user": JSON.stringify(session),
+        };
+      }
+    }
+    const res = await fetch(`${BACKEND_URL}${path}`, options);
     const data = await res.json().catch(() => null);
     if (data === null) return { offline: true };
     return { offline: false, status: res.status, data };
@@ -334,13 +657,21 @@ async function callBackend(path, init) {
 
 async function groupsHandler(request) {
   const url = new URL(request.url);
+  const session = getSessionUser(request);
+  const userId = sessionUserId(session);
+  const admin = sessionIsAdmin(session);
 
   if (request.method === "GET") {
-    const backend = await callBackend("/api/groups");
+    const backend = await callBackend("/api/groups", undefined, request);
     if (!backend.offline) {
       return json({ groups: backend.data.groups ?? [] }, backend.status);
     }
-    return json({ groups: await getGroups() });
+
+    const all = await getGroups();
+    const groups = admin
+      ? all
+      : all.filter((g) => String(g.userId ?? "") === String(userId));
+    return json({ groups });
   }
 
   if (request.method === "POST") {
@@ -349,16 +680,20 @@ async function groupsHandler(request) {
 
     if (!name) return badRequest("Group name is required.");
 
-    const backend = await callBackend("/api/groups", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
+    const backend = await callBackend(
+      "/api/groups",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      },
+      request
+    );
     if (!backend.offline) {
       return json(backend.data, backend.status);
     }
 
-    const group = await createGroup(name);
+    const group = await createGroup(name, userId);
     return json({ success: true, group }, 201);
   }
 
@@ -371,16 +706,20 @@ async function groupsHandler(request) {
       return badRequest("Group ID and name are required.");
     }
 
-    const backend = await callBackend("/api/groups", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, name }),
-    });
+    const backend = await callBackend(
+      "/api/groups",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, name }),
+      },
+      request
+    );
     if (!backend.offline) {
       return json(backend.data, backend.status);
     }
 
-    const group = await updateGroup(id, name);
+    const group = await updateGroup(id, name, userId, admin);
     if (!group) return notFound("Group not found.");
 
     return json({ success: true, group });
@@ -393,13 +732,14 @@ async function groupsHandler(request) {
 
     const backend = await callBackend(
       `/api/groups?id=${encodeURIComponent(id)}`,
-      { method: "DELETE" }
+      { method: "DELETE" },
+      request
     );
     if (!backend.offline) {
       return json(backend.data, backend.status);
     }
 
-    const success = await deleteGroup(id);
+    const success = await deleteGroup(id, userId, admin);
     if (!success) return notFound("Group not found.");
 
     return json({ success: true });
@@ -408,24 +748,40 @@ async function groupsHandler(request) {
   return json({ success: false, message: "Method not allowed." }, 405);
 }
 
-async function fetchAllContacts() {
-  const backend = await callBackend("/api/contacts");
+async function fetchAllContacts(request) {
+  const backend = await callBackend("/api/contacts", undefined, request);
   if (!backend.offline) return backend.data.contacts ?? [];
 
   const parsed = await readJson("contacts.json", {});
-  return Object.values(parsed).flat();
+  const all = Object.values(parsed).flat();
+
+  const session = getSessionUser(request);
+  if (!session || sessionIsAdmin(session)) return all;
+
+  const userId = sessionUserId(session);
+  return all.filter((c) => String(c.userId ?? "") === String(userId));
 }
 
-async function groupContactsHandler(_request, { groupId }) {
+async function groupContactsHandler(request, { groupId }) {
   const backend = await callBackend(
-    `/api/contacts?groupId=${encodeURIComponent(groupId)}`
+    `/api/contacts?groupId=${encodeURIComponent(groupId)}`,
+    undefined,
+    request
   );
   if (!backend.offline) {
     return json({ contacts: backend.data.contacts ?? [] });
   }
 
   const contacts = await readJson("contacts.json", {});
-  return json({ contacts: contacts[groupId] ?? [] });
+  let list = contacts[groupId] ?? [];
+
+  const session = getSessionUser(request);
+  if (session && !sessionIsAdmin(session)) {
+    const userId = sessionUserId(session);
+    list = list.filter((c) => String(c.userId ?? "") === String(userId));
+  }
+
+  return json({ contacts: list });
 }
 
 /* ------------------------------------------------------------------ *
@@ -460,12 +816,23 @@ async function messagesHandler(request) {
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
   const q = searchParams.get("q");
+  let userId = searchParams.get("userId");
   const page = parseInt(searchParams.get("page") || "1", 10);
   const pageSize = parseInt(searchParams.get("pageSize") || "10", 10);
 
-  const messages = await getMessages();
+  const session = getSessionUser(request);
+  if (session && !sessionIsAdmin(session)) {
+    userId = String(sessionUserId(session));
+  }
 
+  const messages = await getMessages();
   let filtered = messages;
+
+  let senderScoped = messages;
+  if (userId) {
+    senderScoped = senderScoped.filter((m) => String(m.userId ?? "") === String(userId));
+    filtered = senderScoped;
+  }
 
   if (status) filtered = filtered.filter((m) => m.status === status);
   if (type) filtered = filtered.filter((m) => m.type === type);
@@ -496,16 +863,16 @@ async function messagesHandler(request) {
 
   return json({
     messages: paginated,
-    total: messages.length,
+    total: filtered.length,
     totalFiltered,
     page,
     pageSize,
     totalPages,
     summary: {
-      total: messages.length,
-      delivered: messages.filter((m) => m.status === "Delivered").length,
-      pending: messages.filter((m) => m.status === "Pending").length,
-      failed: messages.filter((m) => m.status === "Failed").length,
+      total: senderScoped.length,
+      delivered: senderScoped.filter((m) => m.status === "Delivered").length,
+      pending: senderScoped.filter((m) => m.status === "Pending").length,
+      failed: senderScoped.filter((m) => m.status === "Failed").length,
     },
     filters: {
       status: status ?? "",
@@ -513,6 +880,7 @@ async function messagesHandler(request) {
       dateFrom: dateFrom ?? "",
       dateTo: dateTo ?? "",
       q: q ?? "",
+      userId: userId ?? "",
     },
   });
 }
@@ -628,15 +996,21 @@ async function contactsImportHandler(request) {
     return badRequest("Unsupported content type.");
   }
 
-  const backend = await callBackend("/api/contacts/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ groupId, contacts }),
-  });
+  const backend = await callBackend(
+    "/api/contacts/import",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ groupId, contacts }),
+    },
+    request
+  );
   if (!backend.offline) {
     return json(backend.data, backend.status);
   }
 
+  const session = getSessionUser(request);
+  const userId = sessionUserId(session);
   const existing = await readJson("contacts.json", {});
   const list = existing[groupId] ?? [];
 
@@ -650,7 +1024,7 @@ async function contactsImportHandler(request) {
       if (!duplicates.includes(c.phone)) duplicates.push(c.phone);
       continue;
     }
-    list.push({ ...c, groupId });
+    list.push({ ...c, groupId, userId: userId ? String(userId) : "" });
     seen.add(c.phone);
     imported++;
   }
@@ -658,7 +1032,78 @@ async function contactsImportHandler(request) {
 
   await writeJson("contacts.json", existing);
 
+  if (imported > 0) {
+    const groupsData = await readJson("groups.json", { groups: [] });
+    const groupIndex = (groupsData.groups ?? []).findIndex((g) => g.id === groupId);
+    if (groupIndex !== -1) {
+      groupsData.groups[groupIndex].contacts = list.length;
+      await writeJson("groups.json", groupsData);
+    }
+  }
+
   return json({ success: true, imported, duplicates });
+}
+
+/* ------------------------------------------------------------------ *
+ * Contacts create (single)
+ * ------------------------------------------------------------------ */
+
+async function contactsCreateHandler(request) {
+  const body = await request.json().catch(() => null);
+  const { groupId, phone, name, email, address } = body ?? {};
+
+  if (!groupId) return badRequest("groupId is required.");
+  if (!phone || typeof phone !== "string" || phone.trim().length === 0) {
+    return badRequest("Phone number is required.");
+  }
+
+  const backend = await callBackend(
+    "/api/contacts",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ groupId, phone: phone.trim(), name: name?.trim() ?? "", email: email?.trim() ?? "", address: address?.trim() ?? "" }),
+    },
+    request
+  );
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+
+  const session = getSessionUser(request);
+  const userId = sessionUserId(session);
+  const existing = await readJson("contacts.json", {});
+  const list = existing[groupId] ?? [];
+
+  const seen = new Set(list.map((e) => e.phone));
+  const normalizedPhone = phone.trim();
+
+  if (seen.has(normalizedPhone)) {
+    return json({ success: false, message: "Contact with this phone number already exists in the group." }, 409);
+  }
+
+  const newContact = {
+    phone: normalizedPhone,
+    name: name?.trim() ?? "",
+    email: email?.trim() ?? "",
+    address: address?.trim() ?? "",
+    groupId,
+    userId: userId ? String(userId) : "",
+    createdAt: new Date().toISOString(),
+  };
+
+  list.push(newContact);
+  existing[groupId] = list;
+  await writeJson("contacts.json", existing);
+
+  const groupsData = await readJson("groups.json", { groups: [] });
+  const groupIndex = (groupsData.groups ?? []).findIndex((g) => g.id === groupId);
+  if (groupIndex !== -1) {
+    groupsData.groups[groupIndex].contacts = (groupsData.groups[groupIndex].contacts ?? 0) + 1;
+    await writeJson("groups.json", groupsData);
+  }
+
+  return json({ success: true, contact: newContact }, 201);
 }
 
 /* ------------------------------------------------------------------ *
@@ -695,7 +1140,7 @@ function nextMessageNumber(messages) {
   return max + 1;
 }
 
-async function saveSentMessages(outgoing) {
+async function saveSentMessages(outgoing, userId) {
   const { date, time } = formatDateTime(new Date());
 
   const shaped = outgoing.map((o) => ({
@@ -706,6 +1151,7 @@ async function saveSentMessages(outgoing) {
     status: o.status ?? "Delivered",
     date,
     time,
+    userId: userId ? String(userId) : "",
   }));
 
   const backend = await callBackend("/api/messages", {
@@ -742,9 +1188,9 @@ function digitsOnly(phone) {
   return phone.replace(/[^0-9]/g, "");
 }
 
-async function loadNameByPhone() {
+async function loadNameByPhone(request) {
   const map = new Map();
-  const contacts = await fetchAllContacts();
+  const contacts = await fetchAllContacts(request);
 
   for (const contact of contacts) {
     const key = digitsOnly(contact.phone);
@@ -756,10 +1202,33 @@ async function loadNameByPhone() {
   return map;
 }
 
+async function sendViaBackend(recipients, userId, type) {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/sms/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: userId != null && userId !== "" ? String(userId) : undefined,
+        type,
+        recipients,
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (data === null) return { offline: true };
+    return { offline: false, status: res.status, data };
+  } catch {
+    return { offline: true };
+  }
+}
+
 async function sendSmsHandler(request) {
   try {
     const body = await request.json().catch(() => null);
     const { numbers, message, type } = body ?? {};
+    const session = getSessionUser(request);
+    const userId = body?.userId ?? (session ? sessionUserId(session) : undefined);
+    const finalType =
+      typeof type === "string" && type.trim() ? type.trim() : "Transactional";
 
     if (!numbers || !Array.isArray(numbers) || numbers.length === 0) {
       return json({ error: "No valid numbers provided" }, 400);
@@ -769,66 +1238,45 @@ async function sendSmsHandler(request) {
       return json({ error: "Message is required" }, 400);
     }
 
-    const apiKey = process.env.SMS_API_KEY;
-    const senderId = process.env.SMS_SENDER_ID || "SMSPortal";
-    const nameByPhone = await loadNameByPhone();
+    const nameByPhone = await loadNameByPhone(request);
 
-    const results = await Promise.all(
-      numbers.map(async (number) => {
+    const recipients = numbers
+      .map((number) => {
         const name = nameByPhone.get(digitsOnly(number));
-
-        if (!apiKey) {
-          return { number, name, success: true, messageId: null, error: null };
-        }
-
-        try {
-          const response = await fetch("https://api.smsprovider.com/send", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              to: number,
-              message: renderMessage(message.trim(), name),
-              sender: senderId,
-            }),
-          });
-
-          const data = await response.json().catch(() => ({}));
-
-          return {
-            number,
-            name,
-            success: response.ok,
-            messageId: data.messageId || null,
-            error: response.ok ? null : data.error || "Failed to send",
-          };
-        } catch (err) {
-          return {
-            number,
-            name,
-            success: false,
-            messageId: null,
-            error: err instanceof Error ? err.message : "Network error",
-          };
-        }
+        return {
+          to: String(number),
+          contact: name ?? "",
+          content: renderMessage(message.trim(), name),
+          type: finalType,
+        };
       })
-    );
+      .filter((r) => r.to.trim().length > 0 && r.content.trim().length > 0);
+
+    if (recipients.length === 0) {
+      return json({ error: "No valid numbers provided" }, 400);
+    }
+
+    const backend = await sendViaBackend(recipients, userId, finalType);
+    if (!backend.offline) {
+      return json(backend.data, backend.status);
+    }
+
+    const results = recipients.map((r) => ({ ...r, success: true }));
 
     await saveSentMessages(
       results.map((r) => ({
-        to: r.number,
-        contact: r.name ?? "",
-        content: renderMessage(message.trim(), r.name),
-        type: typeof type === "string" && type.trim() ? type.trim() : "Transactional",
-        status: r.success ? "Delivered" : "Failed",
-      }))
+        to: r.to,
+        contact: r.contact ?? "",
+        content: r.content,
+        type: r.type,
+        status: "Delivered",
+      })),
+      userId
     );
 
     const successCount = results.filter((r) => r.success).length;
 
-    await deductWallet(successCount);
+    await consumeUserSms(userId, successCount);
 
     return json({
       success: true,
@@ -846,6 +1294,8 @@ async function sendToGroupsHandler(request) {
   const body = await request.json().catch(() => null);
   const groupIds = body?.groupIds;
   const message = body?.message;
+  const session = getSessionUser(request);
+  const userId = body?.userId ?? (session ? sessionUserId(session) : undefined);
   const type =
     typeof body?.type === "string" && body.type.trim()
       ? body.type.trim()
@@ -861,7 +1311,7 @@ async function sendToGroupsHandler(request) {
     return badRequest("groupIds (array) and message are required.");
   }
 
-  const allContacts = await fetchAllContacts();
+  const allContacts = await fetchAllContacts(request);
   const wanted = new Set(groupIds);
   const contacts = allContacts.filter((c) => wanted.has(c.groupId));
 
@@ -869,17 +1319,22 @@ async function sendToGroupsHandler(request) {
     return badRequest("No contacts in selected groups.");
   }
 
-  const saved = await saveSentMessages(
-    contacts.map((contact) => ({
-      to: contact.phone,
-      contact: contact.name ?? "",
-      content: renderMessage(message, contact.name),
-      type,
-    }))
-  );
+  const recipients = contacts.map((contact) => ({
+    to: contact.phone,
+    contact: contact.name ?? "",
+    content: renderMessage(message, contact.name),
+    type,
+  }));
+
+  const backend = await sendViaBackend(recipients, userId, type);
+  if (!backend.offline) {
+    return json(backend.data, backend.status);
+  }
+
+  const saved = await saveSentMessages(recipients, userId);
 
   const delivered = saved.filter((m) => m.status === "Delivered").length;
-  await deductWallet(delivered);
+  await consumeUserSms(userId, delivered);
 
   return json({ success: true, sent: saved.length });
 }
@@ -899,8 +1354,54 @@ async function route(request) {
     return logoutHandler();
   }
 
+  if (pathname === "/api/auth/session" && request.method === "GET") {
+    return sessionHandler(request);
+  }
+
+  if (pathname === "/api/auth/change-password" && request.method === "POST") {
+    return changePasswordHandler(request);
+  }
+
+  if (pathname === "/api/users" && (request.method === "GET" || request.method === "POST")) {
+    return usersHandler(request);
+  }
+
+  const userShow = pathname.match(/^\/api\/users\/(\d+)$/);
+  if (userShow && request.method === "GET") {
+    return userShowHandler(request, { userId: userShow[1] });
+  }
+
+  const userSmsAssign = pathname.match(/^\/api\/users\/(\d+)\/sms-assign$/);
+  if (userSmsAssign && request.method === "POST") {
+    return userSmsAssignHandler(request, { userId: userSmsAssign[1] });
+  }
+
+  const userBalance = pathname.match(/^\/api\/users\/(\d+)\/balance$/);
+  if (userBalance && request.method === "POST") {
+    return userBalanceHandler(request, { userId: userBalance[1] });
+  }
+
+  const userConsume = pathname.match(/^\/api\/users\/(\d+)\/consume$/);
+  if (userConsume && request.method === "POST") {
+    return userConsumeHandler(request, { userId: userConsume[1] });
+  }
+
+  if (pathname === "/api/sms-settings" && (request.method === "GET" || request.method === "POST")) {
+    return request.method === "GET"
+      ? smsSettingsGetHandler(request)
+      : smsSettingsPostHandler(request);
+  }
+
+  if (pathname === "/api/sms-settings/balance" && request.method === "GET") {
+    return smsSettingsBalanceHandler(request);
+  }
+
   if (pathname === "/api/dashboard" && request.method === "GET") {
     return dashboardHandler(request);
+  }
+
+  if (pathname === "/api/wallet" && request.method === "GET") {
+    return walletHandler(request);
   }
 
   if (pathname === "/api/groups") {
@@ -920,6 +1421,10 @@ async function route(request) {
 
   if (pathname === "/api/contacts/import" && request.method === "POST") {
     return contactsImportHandler(request);
+  }
+
+  if (pathname === "/api/contacts" && request.method === "POST") {
+    return contactsCreateHandler(request);
   }
 
   if (pathname === "/api/send-sms" && request.method === "POST") {

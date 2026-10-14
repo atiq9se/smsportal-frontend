@@ -1,27 +1,39 @@
 {
   "groups": [
     {
-      "id": "grp-1791350229236",
-      "name": "Group Three",
+      "id": "grp-1791798429942",
+      "name": "group five",
+      "userId": "5",
       "contacts": 0,
       "type": "Static",
-      "createdAt": "2026-10-07",
+      "createdAt": "2026-10-12",
       "lastSent": "Never"
     },
     {
-      "id": "grp-1791346440727",
-      "name": "test two",
+      "id": "grp-1791798414533",
+      "name": "user two",
+      "userId": "4",
       "contacts": 0,
       "type": "Static",
-      "createdAt": "2026-10-07",
+      "createdAt": "2026-10-12",
       "lastSent": "Never"
     },
     {
-      "id": "grp-1791265465662",
-      "name": "Group one",
+      "id": "grp-1791797237070",
+      "name": "user one",
+      "userId": "4",
       "contacts": 0,
       "type": "Static",
-      "createdAt": "2026-10-06",
+      "createdAt": "2026-10-12",
+      "lastSent": "Never"
+    },
+    {
+      "id": "grp-1791797186056",
+      "name": "test user",
+      "userId": "5",
+      "contacts": 0,
+      "type": "Static",
+      "createdAt": "2026-10-12",
       "lastSent": "Never"
     }
   ]

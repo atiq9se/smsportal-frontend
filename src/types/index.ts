@@ -5,6 +5,30 @@ export interface SessionUser {
   role: string;
 }
 
+export interface AdminUser {
+  id: number;
+  username: string;
+  name: string;
+  role: string;
+  active: boolean;
+  smsBalance?: number;
+  balanceTaka?: number;
+  smsCost?: number;
+  createdAt: string;
+}
+
+export interface SmsSettings {
+  apiUrl: string;
+  sendUrl?: string;
+  resolvedSendUrl?: string;
+  username: string;
+  password: string;
+  senderId?: string;
+  configured: boolean;
+  sendConfigured?: boolean;
+  updatedAt?: string | null;
+}
+
 export interface Stat {
   label: string;
   value: string;
@@ -28,6 +52,7 @@ export interface Message {
   status: string;
   date: string;
   time: string;
+  userId?: string;
 }
 
 export interface Group {

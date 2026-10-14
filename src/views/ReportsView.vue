@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { MessageSummary, MessagesResponse } from "@/types";
 
 type Message = MessagesResponse["messages"][number];
@@ -11,10 +11,23 @@ const statusStyles: Record<string, string> = {
   Failed: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400",
 };
 
-const SMS_COST_TAKA = 0.35;
+const DEFAULT_SMS_COST = 0.35;
 
-function costOf(status: string): number {
-  return status === "Delivered" ? SMS_COST_TAKA : 0;
+const users = ref<Array<{ id: number; name: string; smsCost: number }>>([]);
+const userId = ref("");
+
+const costByUser = computed<Record<string, number>>(() => {
+  const map: Record<string, number> = {};
+  for (const u of users.value) {
+    map[String(u.id)] = u.smsCost > 0 ? u.smsCost : DEFAULT_SMS_COST;
+  }
+  return map;
+});
+
+function costOf(status: string, msgUserId?: string | number): number {
+  if (status !== "Delivered") return 0;
+  const owner = userId.value || (msgUserId != null ? String(msgUserId) : "");
+  return costByUser.value[owner] ?? DEFAULT_SMS_COST;
 }
 
 function taka(value: number): string {
@@ -81,6 +94,23 @@ const totalPages = ref(1);
 let controller: AbortController | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
+async function fetchUsers() {
+  try {
+    const res = await fetch("/api/users");
+    const data: { users?: Array<{ id: number; name: string; smsCost?: number }> } =
+      await res.json();
+    users.value = (data.users ?? []).map((u) => ({
+      id: u.id,
+      name: u.name,
+      smsCost: u.smsCost ?? DEFAULT_SMS_COST,
+    }));
+  } catch {
+    users.value = [];
+  }
+}
+
+onMounted(fetchUsers);
+
 async function load() {
   const local = new AbortController();
   controller = local;
@@ -92,6 +122,7 @@ async function load() {
     if (type.value) params.set("type", type.value);
     if (dateFrom.value) params.set("dateFrom", dateFrom.value);
     if (dateTo.value) params.set("dateTo", dateTo.value);
+    if (userId.value) params.set("userId", userId.value);
     params.set("page", String(page.value));
     params.set("pageSize", String(pageSize.value));
 
@@ -115,7 +146,7 @@ async function load() {
         cost: 0,
       };
       existing.total++;
-      existing.cost += costOf(m.status);
+      existing.cost += costOf(m.status, m.userId);
       if (m.status === "Delivered") existing.delivered++;
       else if (m.status === "Pending") existing.pending++;
       else if (m.status === "Failed") existing.failed++;
@@ -141,7 +172,7 @@ function scheduleLoad() {
   timer = setTimeout(load, 200);
 }
 
-watch([q, status, type, dateFrom, dateTo], () => {
+watch([q, status, type, dateFrom, dateTo, userId], () => {
   page.value = 1;
   scheduleLoad();
 }, { immediate: true });
@@ -158,7 +189,7 @@ const deliveryRate = computed(() =>
 );
 
 const totalCost = computed(() =>
-  messages.value.reduce((sum, m) => sum + costOf(m.status), 0)
+  messages.value.reduce((sum, m) => sum + costOf(m.status, m.userId), 0)
 );
 
 function clearFilters() {
@@ -187,7 +218,7 @@ function exportCsv() {
     "Date & Time",
   ];
   const rows = messages.value.map((m) =>
-    [m.id, m.to, m.content, m.type, m.status, costOf(m.status).toFixed(2), `${m.date} ${m.time}`]
+    [m.id, m.to, m.content, m.type, m.status, costOf(m.status, m.userId).toFixed(2), `${m.date} ${m.time}`]
       .map(csvEscape)
       .join(",")
   );
@@ -234,11 +265,11 @@ function exportCsv() {
       </button>
     </div>
 
-    <div class="grid grid-cols-2 gap-5 lg:grid-cols-6">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
       <div
         v-for="card in summaryCards"
         :key="card.key"
-        class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900"
+        class="rounded-xl border border-zinc-200 bg-white p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900"
       >
         <span
           class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
@@ -246,31 +277,31 @@ function exportCsv() {
         >
           {{ card.label }}
         </span>
-        <p class="mt-3 text-2xl font-bold text-zinc-900 dark:text-white">
+        <p class="mt-2 sm:mt-3 text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white">
           {{ summary ? summary[card.key] : "—" }}
         </p>
       </div>
       <div
-        class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900"
+        class="rounded-xl border border-zinc-200 bg-white p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900"
       >
         <span
           class="inline-flex rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-600 dark:bg-violet-950 dark:text-violet-400"
         >
           Delivery Rate
         </span>
-        <p class="mt-3 text-2xl font-bold text-zinc-900 dark:text-white">
+        <p class="mt-2 sm:mt-3 text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white">
           {{ deliveryRate }}%
         </p>
       </div>
       <div
-        class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900"
+        class="rounded-xl border border-zinc-200 bg-white p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900"
       >
         <span
           class="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600 dark:bg-blue-950 dark:text-blue-400"
         >
           Total Cost
         </span>
-        <p class="mt-3 text-2xl font-bold text-zinc-900 dark:text-white">
+        <p class="mt-2 sm:mt-3 text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white">
           {{ taka(totalCost) }}
         </p>
       </div>
@@ -280,9 +311,19 @@ function exportCsv() {
       class="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
     >
       <div
-        class="flex flex-wrap items-center gap-3 border-b border-zinc-100 px-6 py-4 dark:border-zinc-800"
+        class="flex flex-wrap items-center gap-3 border-b border-zinc-100 px-4 py-4 sm:px-6 dark:border-zinc-800"
       >
-        <div class="relative w-full max-w-xs">
+        <select
+          v-model="userId"
+          class="flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 outline-none transition focus:border-blue-500 sm:flex-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+        >
+          <option value="">All Users</option>
+          <option v-for="u in users" :key="u.id" :value="String(u.id)">
+            {{ u.name }}
+          </option>
+        </select>
+
+        <div class="relative w-full sm:max-w-xs">
           <span
             class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400"
           >
@@ -310,7 +351,7 @@ function exportCsv() {
 
         <select
           v-model="status"
-          class="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 outline-none transition focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+          class="flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 outline-none transition focus:border-blue-500 sm:flex-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
         >
           <option value="">All Status</option>
           <option>Delivered</option>
@@ -320,7 +361,7 @@ function exportCsv() {
 
         <select
           v-model="type"
-          class="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 outline-none transition focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+          class="flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 outline-none transition focus:border-blue-500 sm:flex-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
         >
           <option value="">All Types</option>
           <option>OTP</option>
@@ -329,24 +370,24 @@ function exportCsv() {
           <option>Alert</option>
         </select>
 
-        <div class="flex items-center gap-1">
+        <div class="flex w-full items-center gap-1 sm:w-auto">
           <input
             v-model="dateFrom"
             type="date"
             aria-label="From date"
-            class="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 outline-none transition focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+            class="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 outline-none transition focus:border-blue-500 sm:flex-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
           />
           <span class="px-1 text-zinc-400">to</span>
           <input
             v-model="dateTo"
             type="date"
             aria-label="To date"
-            class="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 outline-none transition focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+            class="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 outline-none transition focus:border-blue-500 sm:flex-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
           />
         </div>
 
         <button
-          class="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          class="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-50 sm:ml-auto dark:border-zinc-700 dark:hover:bg-zinc-800"
           @click="clearFilters"
         >
           Clear
@@ -355,13 +396,13 @@ function exportCsv() {
 
       <div
         v-if="dailyStats.length > 0"
-        class="border-b border-zinc-100 px-6 py-4 dark:border-zinc-800"
+        class="border-b border-zinc-100 px-4 py-4 sm:px-6 dark:border-zinc-800"
       >
         <h3 class="mb-3 text-sm font-semibold text-zinc-900 dark:text-white">
           Daily Summary
         </h3>
         <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
+          <table class="w-full min-w-[560px] text-left text-sm">
             <thead>
               <tr
                 class="border-b border-zinc-100 text-xs uppercase tracking-wider text-zinc-400 dark:border-zinc-800"
@@ -410,29 +451,29 @@ function exportCsv() {
         </div>
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
+<div class="no-scrollbar overflow-x-auto">
+        <table class="w-full min-w-[860px] text-left text-sm">
           <thead>
             <tr
               class="border-b border-zinc-100 text-xs uppercase tracking-wider text-zinc-400 dark:border-zinc-800"
             >
-              <th class="px-6 py-3 font-medium">ID</th>
-              <th class="px-6 py-3 font-medium">Phone Number</th>
-              <th class="px-6 py-3 font-medium">Message</th>
-              <th class="px-6 py-3 font-medium">Type</th>
-              <th class="px-6 py-3 font-medium">Status</th>
-              <th class="px-6 py-3 font-medium">Cost</th>
-              <th class="px-6 py-3 font-medium">Date &amp; Time</th>
+              <th class="px-4 sm:px-6 py-3 font-medium">ID</th>
+              <th class="px-4 sm:px-6 py-3 font-medium">Phone Number</th>
+              <th class="px-4 sm:px-6 py-3 font-medium">Message</th>
+              <th class="px-4 sm:px-6 py-3 font-medium">Type</th>
+              <th class="px-4 sm:px-6 py-3 font-medium">Status</th>
+              <th class="px-4 sm:px-6 py-3 font-medium">Cost</th>
+              <th class="px-4 sm:px-6 py-3 font-medium">Date & Time</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
             <tr v-if="loading">
-              <td colspan="7" class="px-6 py-12 text-center text-sm text-zinc-400">
+              <td colspan="7" class="px-4 sm:px-6 py-12 text-center text-sm text-zinc-400">
                 Loading messages...
               </td>
             </tr>
             <tr v-else-if="messages.length === 0">
-              <td colspan="7" class="px-6 py-12 text-center text-sm text-zinc-400">
+              <td colspan="7" class="px-4 sm:px-6 py-12 text-center text-sm text-zinc-400">
                 No messages found for the selected filters.
               </td>
             </tr>
@@ -442,16 +483,16 @@ function exportCsv() {
                 :key="m.id"
                 class="transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
               >
-              <td class="px-6 py-3.5 font-mono text-xs text-zinc-500">{{ m.id }}</td>
-              <td class="px-6 py-3.5">
+              <td class="px-4 sm:px-6 py-3.5 font-mono text-xs text-zinc-500">{{ m.id }}</td>
+              <td class="px-4 sm:px-6 py-3.5">
                 <p class="font-mono font-medium text-zinc-900 dark:text-white">
                   {{ m.to }}
                 </p>
               </td>
-              <td class="max-w-md truncate px-6 py-3.5 text-zinc-500">
+              <td class="max-w-md truncate px-4 sm:px-6 py-3.5 text-zinc-500">
                 {{ m.content }}
               </td>
-              <td class="px-6 py-3.5">
+              <td class="px-4 sm:px-6 py-3.5">
                 <span
                   class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium"
                   :class="typeStyles[m.type]"
@@ -459,7 +500,7 @@ function exportCsv() {
                   {{ m.type }}
                 </span>
               </td>
-              <td class="px-6 py-3.5">
+              <td class="px-4 sm:px-6 py-3.5">
                 <span
                   class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
                   :class="statusStyles[m.status]"
@@ -469,16 +510,16 @@ function exportCsv() {
                 </span>
               </td>
               <td
-                class="whitespace-nowrap px-6 py-3.5 font-medium"
+                class="whitespace-nowrap px-4 sm:px-6 py-3.5 font-medium"
                 :class="
-                  costOf(m.status) > 0
+                  costOf(m.status, m.userId) > 0
                     ? 'text-zinc-900 dark:text-white'
                     : 'text-zinc-400'
                 "
               >
-                {{ taka(costOf(m.status)) }}
+                {{ taka(costOf(m.status, m.userId)) }}
               </td>
-              <td class="whitespace-nowrap px-6 py-3.5 text-zinc-500">
+              <td class="whitespace-nowrap px-4 sm:px-6 py-3.5 text-zinc-500">
                 {{ m.date }} {{ m.time }}
               </td>
               </tr>
@@ -488,7 +529,7 @@ function exportCsv() {
       </div>
 
       <div
-        class="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-6 py-4 dark:border-zinc-800"
+        class="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-4 py-4 sm:px-6 dark:border-zinc-800"
       >
         <p class="text-sm text-zinc-500">
           Showing

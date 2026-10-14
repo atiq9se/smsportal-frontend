@@ -5,7 +5,6 @@ import {
   Badge,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   PageHeader,
@@ -19,34 +18,58 @@ import {
   statusBadgeStyles,
 } from "@/components/ui";
 import { useAuth } from "@/composables/useAuth";
-import type { DashboardData, WalletBalance } from "@/types";
+import type { MessageSummary } from "@/types";
 
 const { user } = useAuth();
 
-const stats = ref<DashboardData["stats"]>([]);
-const recentMessages = ref<DashboardData["recentMessages"]>([]);
-const wallet = ref<WalletBalance | null>(null);
+const recentMessages = ref<Array<{
+  id: string;
+  to: string;
+  content: string;
+  status: string;
+  time: string;
+}>>([]);
+const myBalance = ref<{ smsBalance: number; balanceTaka: number } | null>(null);
+const summary = ref<MessageSummary | null>(null);
 const loaded = ref(false);
 
-onMounted(async () => {
+async function fetchDashboardData() {
+  const uid = user.value?.id ? String(user.value.id) : "";
   try {
-    const res = await fetch("/api/dashboard");
-    const data: DashboardData = await res.json();
-    stats.value = data.stats ?? [];
-    recentMessages.value = data.recentMessages ?? [];
-    wallet.value = data.balance ?? null;
+    const messagesRes = fetch(`/api/messages?pageSize=5&userId=${uid}`);
+    const balanceRes: Promise<Response> | null = uid
+      ? fetch(`/api/users/${uid}`)
+      : null;
+
+    const [messagesData, userData] = await Promise.all([
+      messagesRes.then((r) => r.json()),
+      balanceRes ? balanceRes.then((r) => r.json()) : Promise.resolve(null),
+    ]);
+
+    summary.value = messagesData.summary ?? null;
+    recentMessages.value = messagesData.messages ?? [];
+    myBalance.value = null;
+
+    if (userData && userData.success && userData.user) {
+      myBalance.value = {
+        smsBalance: Number(userData.user.smsBalance) || 0,
+        balanceTaka: Number(userData.user.balanceTaka) || 0,
+      };
+    }
   } catch {
-    stats.value = [];
     recentMessages.value = [];
-    wallet.value = null;
+    myBalance.value = null;
+    summary.value = null;
   } finally {
     loaded.value = true;
   }
-});
+}
+
+onMounted(fetchDashboardData);
 
 const statConfigs = [
   {
-    key: "totalSent",
+    key: "total",
     label: "Total Sent",
     icon: "📊",
     accent:
@@ -84,36 +107,27 @@ const today = new Date().toLocaleDateString("en-US", {
 const firstName = computed(() => user.value?.name.split(" ")[0] ?? "there");
 
 const statValues = computed(() => {
-  const found = (label: string) =>
-    stats.value.find((s) => s.label === label)?.value || "0";
-  return {
-    totalSent: found("Total Sent"),
-    delivered: found("Delivered"),
-    pending: found("Pending"),
-    failed: found("Failed"),
-  };
+  if (summary.value) {
+    return {
+      total: String(summary.value.total),
+      delivered: String(summary.value.delivered),
+      pending: String(summary.value.pending),
+      failed: String(summary.value.failed),
+    };
+  }
+  return { total: "0", delivered: "0", pending: "0", failed: "0" };
 });
 
-const smsBalance = computed(() =>
-  stats.value.find((s) => s.label === "Remaining SMS Balance")
-);
-const smsTotal = computed(
-  () =>
-    smsBalance.value?.trend?.match(/of ([\d,]+) total/)?.[1]?.replace(",", "") ||
-    "20000"
-);
-const smsRemaining = computed(() => smsBalance.value?.value || "0");
-
 const balanceTaka = computed(() =>
-  wallet.value
-    ? Number(wallet.value.balanceTaka).toLocaleString()
-    : Number(smsTotal.value).toLocaleString()
+  myBalance.value
+    ? Number(myBalance.value.balanceTaka).toLocaleString()
+    : "0"
 );
 
 const smsRemainingValue = computed(() =>
-  wallet.value
-    ? Number(wallet.value.smsRemaining).toLocaleString()
-    : Number(smsRemaining.value).toLocaleString()
+  myBalance.value
+    ? Number(myBalance.value.smsBalance).toLocaleString()
+    : "0"
 );
 </script>
 
@@ -122,7 +136,7 @@ const smsRemainingValue = computed(() =>
     <PageHeader :title="`Welcome back, ${firstName}`" :description="today">
       <template #action>
         <RouterLink
-          to="/dashboard/send"
+          to="/user/send"
           class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
         >
           <svg
@@ -153,7 +167,7 @@ const smsRemainingValue = computed(() =>
           title="Balance Taka"
           :value="balanceTaka"
           accent="bg-purple-100 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"
-          href="/dashboard/reports"
+          href="/user/reports"
         >
           <template #icon>
             <span class="text-2xl" role="img" aria-hidden="true">💳</span>
@@ -163,7 +177,7 @@ const smsRemainingValue = computed(() =>
           title="SMS Remaining"
           :value="smsRemainingValue"
           accent="bg-indigo-100 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400"
-          href="/dashboard/reports"
+          href="/user/reports"
         >
           <template #icon>
             <span class="text-2xl" role="img" aria-hidden="true">📱</span>
@@ -178,7 +192,7 @@ const smsRemainingValue = computed(() =>
           :title="config.label"
           :value="statValues[config.key]"
           :accent="config.accent"
-          href="/dashboard/reports"
+          href="/user/reports"
         >
           <template #icon>
             <span class="text-2xl" role="img" aria-hidden="true">{{
@@ -190,15 +204,12 @@ const smsRemainingValue = computed(() =>
 
       <Card>
         <CardHeader>
-          <div class="flex items-center justify-between">
+          <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle>Recent Sent Messages</CardTitle>
-              <CardDescription>
-                Latest messages sent through the portal
-              </CardDescription>
             </div>
             <RouterLink
-              to="/dashboard/reports"
+              to="/user/reports"
               class="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
             >
               View all
@@ -212,7 +223,7 @@ const smsRemainingValue = computed(() =>
               No messages sent yet
             </p>
             <RouterLink
-              to="/dashboard/send"
+              to="/user/send"
               class="mt-4 inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
             >
               Send your first SMS

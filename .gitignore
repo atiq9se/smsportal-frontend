@@ -8,3 +8,8 @@ dist-ssr
 
 .DS_Store
 *.log
+
+# local scratch / sensitive files
+login.json
+test.json
+dev.err

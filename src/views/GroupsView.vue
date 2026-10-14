@@ -217,15 +217,15 @@ function copyPhone(phone: string) {
       <div
         v-for="g in groups"
         :key="g.id"
-        class="flex items-center justify-between px-6 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+        class="flex flex-col gap-3 px-4 py-4 hover:bg-zinc-50 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:hover:bg-zinc-800/50"
       >
-        <div class="flex items-center gap-4">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
           <template v-if="editingId === g.id">
             <div class="flex items-center gap-2">
               <input
                 v-model="editName"
                 type="text"
-                class="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                class="w-full rounded-lg border border-zinc-200 bg-white px-2 py-1 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 sm:w-auto dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 autofocus
                 @keydown.enter="saveEdit(g)"
               />
@@ -401,7 +401,7 @@ function copyPhone(phone: string) {
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     >
       <div
-        class="max-h-[70vh] w-full max-w-4xl overflow-hidden rounded-xl bg-white p-6 dark:bg-zinc-900"
+        class="max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-xl bg-white p-4 sm:max-h-[70vh] sm:p-6 dark:bg-zinc-900"
       >
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">
@@ -426,7 +426,7 @@ function copyPhone(phone: string) {
             </svg>
           </button>
         </div>
-        <div class="mt-4 max-h-[55vh] overflow-y-auto">
+        <div class="mt-4 max-h-[55vh] overflow-x-auto overflow-y-auto">
           <div
             v-if="contactsLoading"
             class="flex items-center justify-center py-8 text-zinc-400"
@@ -505,7 +505,7 @@ function copyPhone(phone: string) {
             </tbody>
           </table>
         </div>
-        <div class="mt-4 flex justify-end gap-2">
+        <div class="mt-4 flex flex-wrap justify-end gap-2">
           <button
             v-if="selectedGroupContacts.length > 0"
             class="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"

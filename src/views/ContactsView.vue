@@ -2,6 +2,9 @@
 import { computed, onMounted, ref } from "vue";
 import { PageHeader, StatCard } from "@/components/ui";
 import type { Group } from "@/types";
+import { useAuth } from "@/composables/useAuth";
+
+const { basePath } = useAuth();
 
 const groups = ref<Group[]>([]);
 const selectedGroup = ref("");
@@ -235,7 +238,7 @@ const columns = [
         title="Total Groups"
         :value="totalGroups"
         accent="bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
-        href="/dashboard/groups"
+        :href="`${basePath}/groups`"
       >
         <template #icon>
           <span class="text-2xl" role="img" aria-hidden="true">📁</span>
@@ -245,7 +248,7 @@ const columns = [
         title="Total Contacts"
         :value="totalContacts.toLocaleString()"
         accent="bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
-        href="/dashboard/groups"
+        :href="`${basePath}/groups`"
       >
         <template #icon>
           <span class="text-2xl" role="img" aria-hidden="true">👥</span>
@@ -258,14 +261,11 @@ const columns = [
         <div
           class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
         >
-          <div class="border-b border-zinc-100 px-6 py-5 dark:border-zinc-800">
-            <h2 class="text-base font-semibold text-zinc-900 dark:text-white">
-              Import Contacts
-            </h2>
-            <p class="mt-1 text-sm text-zinc-500">
-              Upload a CSV or Excel file to add numbers to a group
-            </p>
-          </div>
+<div class="border-b border-zinc-100 px-6 py-5 dark:border-zinc-800">
+              <p class="mt-1 text-sm font-bold text-zinc-500">
+                Upload a CSV or Excel file to add numbers to a group
+              </p>
+            </div>
 
           <div class="space-y-6 p-6">
             <div>
@@ -452,7 +452,7 @@ const columns = [
                       d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
                     />
                   </svg>
-                  {{ loading ? "Importing…" : "Import Contacts" }}
+                  {{ loading ? "Importing…" : "Import" }}
                 </button>
               </form>
             </div>
